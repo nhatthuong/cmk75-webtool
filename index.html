@@ -1,0 +1,218 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>CMK75 Web Tool – Giờ GMT+7 &amp; Ngôn ngữ màn hình</title>
+<style>
+  :root{--bg:#0f1115;--card:#181b22;--line:#2a2f3a;--txt:#e6e8ee;--mut:#9aa3b2;--acc:#4f8cff;--ok:#2fbf71;--err:#ff5d5d;--warn:#f5b041}
+  *{box-sizing:border-box}
+  body{margin:0;font:15px/1.5 system-ui,-apple-system,Segoe UI,Roboto,sans-serif;background:var(--bg);color:var(--txt)}
+  main{max-width:860px;margin:0 auto;padding:24px 16px 60px}
+  h1{font-size:22px;margin:0 0 4px} h2{font-size:16px;margin:0 0 12px}
+  p.sub{color:var(--mut);margin:0 0 20px}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:16px;margin-bottom:16px}
+  button{font:inherit;border:0;border-radius:8px;padding:10px 16px;cursor:pointer;background:#2a3140;color:var(--txt)}
+  button.primary{background:var(--acc);color:#fff;font-weight:600}
+  button.big{font-size:17px;padding:14px 20px;flex:1;min-width:230px}
+  button:disabled{opacity:.45;cursor:not-allowed}
+  .row{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
+  .status{font-weight:600}
+  .ok{color:var(--ok)} .err{color:var(--err)} .warn{color:var(--warn)} .mut{color:var(--mut)}
+  textarea{font:13px/1.4 ui-monospace,Consolas,monospace;background:#0b0d11;color:var(--txt);border:1px solid var(--line);border-radius:8px;padding:8px;width:100%;min-height:60px}
+  #log{height:200px;overflow:auto;background:#0b0d11;border:1px solid var(--line);border-radius:8px;padding:8px;font:12px/1.45 ui-monospace,Consolas,monospace;white-space:pre-wrap}
+  .clock{font:600 26px ui-monospace,Consolas,monospace}
+  .chk{display:flex;gap:8px;align-items:center;margin:10px 0 0}
+  details summary{cursor:pointer;font-weight:600}
+  code{background:#0b0d11;padding:1px 5px;border-radius:4px}
+  ul{margin:6px 0;padding-left:20px}
+</style>
+</head>
+<body>
+<main>
+  <h1>CMK75 Web Tool</h1>
+  <p class="sub">Đồng bộ ngày giờ GMT+7 và đổi ngôn ngữ màn hình của bàn phím FL-Esports CMK75 qua WebHID. Không cần cài phần mềm. Dùng Chrome hoặc Edge, cắm phím bằng <b>cáp USB</b>.</p>
+
+  <div class="card">
+    <h2>1. Kết nối</h2>
+    <p id="support" class="mut" style="margin-top:0"></p>
+    <div class="row">
+      <button id="btnConnect" class="primary">Kết nối CMK75</button>
+      <button id="btnConnectAny">Chọn thiết bị khác…</button>
+      <button id="btnDisconnect" disabled>Ngắt</button>
+    </div>
+    <p id="devStatus" class="status mut" style="margin-bottom:0">Chưa kết nối</p>
+  </div>
+
+  <div class="card">
+    <h2>2. Thao tác</h2>
+    <div class="row" style="margin-bottom:12px">
+      <span class="mut">Giờ GMT+7:</span> <span id="clock" class="clock">--</span>
+    </div>
+    <div class="row">
+      <button id="btnTime" class="primary big" disabled>🕒 Cập nhật ngày giờ (GMT+7)</button>
+      <button id="btnLang" class="primary big" disabled>🌐 Đổi ngôn ngữ màn hình (Trung ⇄ Anh)</button>
+    </div>
+    <label class="chk"><input type="checkbox" id="autoTime" checked> Tự động cập nhật giờ GMT+7 mỗi khi kết nối</label>
+    <p class="mut" style="font-size:13px;margin-bottom:0">Nút ngôn ngữ chuyển qua lại giữa Trung và Anh giống nút "Switch Language" của phần mềm gốc. Nếu bấm xong mà màn hình vẫn là tiếng Trung thì bấm thêm một lần nữa.</p>
+  </div>
+
+  <div class="card">
+    <h2>Nhật ký</h2>
+    <div id="log"></div>
+    <div class="row" style="margin-top:8px"><button id="btnClear">Xoá nhật ký</button></div>
+  </div>
+
+  <div class="card">
+    <details>
+      <summary>Chi tiết kỹ thuật &amp; gửi lệnh thô</summary>
+      <ul class="mut" style="font-size:13px">
+        <li>Hỗ trợ CMK75 có USB ID <code>3151:4015</code> và <code>38A9:0000</code>, interface vendor (UsagePage <code>0xFFFF</code>, Usage <code>0x02</code>).</li>
+        <li>Lệnh được gửi bằng HID Feature Report 64 byte. Checksum ở byte 7 bằng <code>0xFF − (tổng byte 0..6)</code>.</li>
+        <li>Đặt giờ: <code>28 00 00 00 00 00 00 D7 [nămH] [nămL] [tháng] [ngày] [giờ] [phút] [giây]</code></li>
+        <li>Đổi ngôn ngữ: <code>27 01 00 00 00 00 00 D7</code></li>
+      </ul>
+      <textarea id="raw" placeholder="Hex, ví dụ: 27 01 (checksum byte 7 sẽ tự tính)"></textarea>
+      <div class="row" style="margin-top:8px"><button id="btnRaw" disabled>Gửi thô (tự thêm checksum)</button></div>
+    </details>
+  </div>
+</main>
+
+<script>
+(() => {
+  const $ = id => document.getElementById(id);
+  const FILTERS = [
+    { vendorId: 0x3151, productId: 0x4015, usagePage: 0xFFFF, usage: 0x02 }, // CMK75 (yc3121 / 1086)
+    { vendorId: 0x38A9, productId: 0x0000, usagePage: 0xFFFF, usage: 0x02 }, // CMK75 (ry5088)
+  ];
+  const CMD_SET_OLEDCLOCK = 0x28;     // 40
+  const CMD_SET_OLEDLANGUAGE = 0x27;  // 39
+  let device = null, reportId = 0, reportLen = 64, busy = false;
+
+  const hex = b => b.toString(16).padStart(2,'0').toUpperCase();
+  const toHex = a => Array.from(a, hex).join(' ');
+  function log(msg, cls='') {
+    const d = document.createElement('div'); if (cls) d.className = cls;
+    d.textContent = `[${new Date().toLocaleTimeString('vi-VN')}] ${msg}`;
+    $('log').appendChild(d); $('log').scrollTop = $('log').scrollHeight;
+  }
+  const sleep = ms => new Promise(r => setTimeout(r, ms));
+
+  // ---- Giờ GMT+7, không phụ thuộc múi giờ máy ----
+  function gmt7() {
+    const d = new Date(Date.now() + 7*3600*1000);
+    return { Y:d.getUTCFullYear(), M:d.getUTCMonth()+1, D:d.getUTCDate(), h:d.getUTCHours(), m:d.getUTCMinutes(), s:d.getUTCSeconds() };
+  }
+  const p2 = n => String(n).padStart(2,'0');
+  setInterval(() => { const t = gmt7(); $('clock').textContent = `${p2(t.D)}/${p2(t.M)}/${t.Y} ${p2(t.h)}:${p2(t.m)}:${p2(t.s)}`; }, 250);
+
+  // ---- Đóng gói lệnh (giống ___encodeCmd + Bit7 của driver gốc) ----
+  function encode(bytes) {
+    const buf = new Uint8Array(Math.max(reportLen, 9));
+    buf.set(bytes.slice(0, buf.length));
+    let sum = 0; for (let i = 0; i < 7; i++) sum += buf[i];
+    buf[7] = 0xFF - (sum & 0xFF);
+    return buf.slice(0, reportLen);
+  }
+  async function send(bytes, label) {
+    if (!device) throw new Error('Chưa kết nối bàn phím');
+    const pkt = encode(bytes);
+    await device.sendFeatureReport(reportId, pkt);
+    log(`⇢ ${label}: ${toHex(pkt.slice(0, 16))} …`, 'mut');
+  }
+
+  async function syncTime() {
+    const t = gmt7();
+    const b = new Array(64).fill(0);
+    b[0] = CMD_SET_OLEDCLOCK;
+    b[8] = t.Y >> 8; b[9] = t.Y & 0xFF; b[10] = t.M; b[11] = t.D; b[12] = t.h; b[13] = t.m; b[14] = t.s;
+    await send(b, 'Đặt giờ');
+    log(`✔ Đã đặt giờ ${p2(t.h)}:${p2(t.m)}:${p2(t.s)} ${p2(t.D)}/${p2(t.M)}/${t.Y} (GMT+7)`, 'ok');
+  }
+  async function switchLanguage() {
+    await send([CMD_SET_OLEDLANGUAGE, 0x01], 'Đổi ngôn ngữ');
+    await sleep(300);
+    log('✔ Đã gửi lệnh đổi ngôn ngữ. Nếu màn hình chưa sang tiếng Anh, bấm thêm một lần.', 'ok');
+  }
+
+  // ---- Kết nối WebHID ----
+  const supported = 'hid' in navigator;
+  $('support').innerHTML = supported
+    ? '<span class="ok">Trình duyệt hỗ trợ WebHID.</span>'
+    : '<span class="err">Trình duyệt này không có WebHID, hoặc đã bị công ty chặn. Hãy dùng Chrome hoặc Edge bản mới và mở trang trong tab riêng.</span>';
+  ['btnConnect','btnConnectAny'].forEach(id => $(id).disabled = !supported);
+
+  function pickCollection(dev) {
+    return dev.collections.find(c => c.usagePage === 0xFFFF && c.usage === 0x02)
+        || dev.collections.find(c => c.usagePage >= 0xFF00 && (c.featureReports||[]).length);
+  }
+  function featureInfo(col) {
+    const r = (col?.featureReports || [])[0];
+    if (!r) return { id: 0, len: 64 };
+    let bits = 0; for (const it of r.items || []) bits += (it.reportSize||0) * (it.reportCount||0);
+    return { id: r.reportId || 0, len: bits ? Math.ceil(bits/8) : 64 };
+  }
+
+  async function useDevice(dev, auto=false) {
+    const col = pickCollection(dev);
+    if (!col) { log(`"${dev.productName}" không có interface cấu hình (0xFFFF). Hãy chọn mục khác cùng tên.`, 'warn'); return false; }
+    if (!dev.opened) await dev.open();
+    if (device && device !== dev) { try { await device.close(); } catch(e){} }
+    device = dev;
+    ({ id: reportId, len: reportLen } = featureInfo(col));
+    const vidpid = `${hex(dev.vendorId>>8)}${hex(dev.vendorId&255)}:${hex(dev.productId>>8)}${hex(dev.productId&255)}`;
+    const known = FILTERS.some(f => f.vendorId === dev.vendorId && f.productId === dev.productId);
+    $('devStatus').textContent = `Đã kết nối: ${dev.productName || 'HID'} (${vidpid})`;
+    $('devStatus').className = 'status ok';
+    log(`Đã mở ${dev.productName} ${vidpid}, feature report ID ${reportId}, ${reportLen} byte.`, 'ok');
+    if (!known) log('USB ID này không nằm trong danh sách CMK75 đã biết. Chỉ gửi lệnh nếu bạn chắc chắn đây là CMK75.', 'warn');
+    refresh();
+    if ($('autoTime').checked && known) { await sleep(200); run(syncTime, 'Tự động đặt giờ'); }
+    return true;
+  }
+
+  async function connect(filters) {
+    try {
+      const devs = await navigator.hid.requestDevice({ filters });
+      if (!devs.length) return log('Bạn chưa chọn thiết bị.', 'warn');
+      for (const d of devs) if (await useDevice(d)) return;
+    } catch (e) { log('Lỗi kết nối: ' + e.message, 'err'); }
+  }
+  $('btnConnect').onclick = () => connect(FILTERS);
+  $('btnConnectAny').onclick = () => connect([]);
+  $('btnDisconnect').onclick = async () => {
+    if (device) try { await device.close(); } catch(e){}
+    device = null; $('devStatus').textContent = 'Chưa kết nối'; $('devStatus').className = 'status mut'; refresh();
+    log('Đã ngắt kết nối.');
+  };
+  if (supported) {
+    navigator.hid.addEventListener('disconnect', e => { if (e.device === device) { device = null; $('devStatus').textContent='Bàn phím đã bị rút'; $('devStatus').className='status warn'; refresh(); log('Bàn phím đã ngắt.', 'warn'); } });
+    navigator.hid.addEventListener('connect', e => { if (!device) useDevice(e.device, true).catch(()=>{}); });
+    // Tự kết nối lại thiết bị đã được cấp quyền trước đó
+    navigator.hid.getDevices().then(async ds => { for (const d of ds) if (pickCollection(d) && await useDevice(d, true).catch(()=>false)) break; });
+  }
+
+  function refresh() {
+    const on = !!device && !busy;
+    $('btnTime').disabled = !on; $('btnLang').disabled = !on; $('btnRaw').disabled = !on; $('btnDisconnect').disabled = !device;
+  }
+  async function run(fn, label) {
+    if (busy) return; busy = true; refresh();
+    try { await fn(); } catch (e) { log(`✖ ${label}: ${e.message}`, 'err'); }
+    finally { busy = false; refresh(); }
+  }
+  $('btnTime').onclick = () => run(syncTime, 'Đặt giờ');
+  $('btnLang').onclick = () => run(switchLanguage, 'Đổi ngôn ngữ');
+  $('btnRaw').onclick = () => run(async () => {
+    const bytes = $('raw').value.trim().split(/[\s,]+/).filter(Boolean).map(x => {
+      const v = parseInt(x.replace(/^0x/i,''), 16); if (isNaN(v) || v > 255) throw new Error(`Byte không hợp lệ: ${x}`); return v; });
+    if (!bytes.length) throw new Error('Chưa nhập dữ liệu');
+    await send(bytes, 'Gửi thô');
+  }, 'Gửi thô');
+  $('btnClear').onclick = () => $('log').innerHTML = '';
+  try { const v = localStorage.getItem('cmk75-autoTime'); if (v !== null) $('autoTime').checked = v === '1'; } catch(e){}
+  $('autoTime').onchange = () => { try { localStorage.setItem('cmk75-autoTime', $('autoTime').checked ? '1' : '0'); } catch(e){} };
+})();
+</script>
+</body>
+</html>
